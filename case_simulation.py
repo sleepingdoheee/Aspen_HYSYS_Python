@@ -143,12 +143,12 @@ class CASE_SIMULATION:
     def sim_obj(self):
         ''' What-if Simulation 최적화 문제 설정 '''
         # INPUT (test) ------------------------------
-        self.furn_fgas_flow = [2038.7, 2267, 100, 100, 2690, 2677, 3431, 2762]
-        self.air_list = [41.1, 33.4, 8.2, 22.1, 51.4, 24.2, 54.1, 44.0]
-        self.fuel_bias_calc = [0, 0, 0, 0, 0, 0, 0, 0]
-        self.air_bias_calc = [0, 0, 0, 0, 0, 0, 0, 0]
+        self.furn_fgas_flow = [2038.4, 2267.4, 0, 0, 2690.8, 2677.1, 3431.2, 2765.5]
+        self.air_list = [41.1, 33.4, 0.0, 0.0, 51.4, 24.2, 54.1, 44.0]
+        self.fuel_bias_calc = [-90.6, -272.6, 0, 0, -336.2, -320.9, 457.2, -329.5]
+        self.air_bias_calc = [-32.95, -27.44, 0, 0, -16.3, -45.15, -15.67, -39.4]
         # self.fuel_bias_calc = [-17.38, -23.87, -12.66, -24.45, -14.01, -21.77, -9.96, -23.99]
-        self.air_bias_calc = [-33.3, -27.8, 2.9, 22.1, 3.2, -45.6, -16.1, -40]
+        # self.air_bias_calc = [-33.3, -27.8, 0.0, 0.0, 3.2, -45.6, -16.1, -40]
         furn_o2_arr = [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
         # -------------------------------------
 
@@ -168,7 +168,7 @@ class CASE_SIMULATION:
 
         # 최적화
         init_point = [0.9, *furn_o2_arr]
-        bnds = [(0,1), (0,21), (0,21), (0,21), (0,21), (0,21), (0,21), (0,21), (0,21)]
+        bnds = [(0,1), (-10,21), (-10,21), (-10,21), (-10,21), (-10,21), (-10,21), (-10,21), (-10,21)]
         from scipy.optimize import minimize
         res = minimize(self.sim_opt, init_point, method='Nelder-Mead', bounds=bnds, options={'fatol':0.0001, 'disp': False})
         
@@ -177,7 +177,6 @@ class CASE_SIMULATION:
         # except:
         #     pass
         
-
         self.FRESH_AIR = self.obj_HOT_AIR - self.EX_GTG_W
         air_d = sum(self.air_list) / (self.obj_HOT_AIR / 1000)
 
@@ -209,20 +208,21 @@ class CASE_SIMULATION:
         obj_HOT_AIR = self.EX_GTG_W + fresh_air_sum     # Raw
         obj_FURN_AIR = furn_air_sum                     # Calc
 
-        obj1 = ((self.sim_air_list_bias[0] * 1000 - self.furn_air_list[0]) ** 2     # 목적함수, Air 입력값 vs Air 계산값
-        + (self.sim_air_list_bias[1] * 1000 - self.furn_air_list[1]) ** 2
-        + (self.sim_air_list_bias[2] * 1000 - self.furn_air_list[2]) ** 2
-        + (self.sim_air_list_bias[3] * 1000 - self.furn_air_list[3]) ** 2
-        + (self.sim_air_list_bias[4] * 1000 - self.furn_air_list[4]) ** 2
-        + (self.sim_air_list_bias[5] * 1000 - self.furn_air_list[5]) ** 2
-        + (self.sim_air_list_bias[6] * 1000 - self.furn_air_list[6]) ** 2
-        + (self.sim_air_list_bias[7] * 1000 - self.furn_air_list[7]) ** 2)
+        obj1_1 = (self.sim_air_list_bias[0] * 1000 - self.furn_air_list[0]) ** 2     # 목적함수, Air 입력값 vs Air 계산값
+        obj1_2 = (self.sim_air_list_bias[1] * 1000 - self.furn_air_list[1]) ** 2
+        obj1_3 = (self.sim_air_list_bias[2] * 1000 - self.furn_air_list[2]) ** 2
+        obj1_4 = (self.sim_air_list_bias[3] * 1000 - self.furn_air_list[3]) ** 2
+        obj1_5 = (self.sim_air_list_bias[4] * 1000 - self.furn_air_list[4]) ** 2
+        obj1_6 = (self.sim_air_list_bias[5] * 1000 - self.furn_air_list[5]) ** 2
+        obj1_7 = (self.sim_air_list_bias[6] * 1000 - self.furn_air_list[6]) ** 2
+        obj1_8 = (self.sim_air_list_bias[7] * 1000 - self.furn_air_list[7]) ** 2
 
         obj2 = (obj_HOT_AIR - obj_FURN_AIR) ** 2                                    # 목적함수2, Hot Air vs 8기 분해로 Air
-
+        print(obj1_1, obj1_2, obj1_3, obj1_4, obj1_5, obj1_6, obj1_7, obj1_8)
+        obj1 = obj1_1 + obj1_2 + obj1_3 + obj1_4 + obj1_5 + obj1_6 + obj1_7 + obj1_8 
         obj = obj1 + obj2
-        print(self.sim_air_list_bias[0] * 1000, self.furn_air_list[0])
-        print(obj1, obj2, obj)
+        # print(self.sim_air_list_bias[0] * 1000, self.furn_air_list[0])
+
         
         self.obj_HOT_AIR = obj_HOT_AIR
         self.obj_FURN_AIR = obj_FURN_AIR
@@ -245,7 +245,6 @@ class CASE_SIMULATION:
         self.load_data()
         self.result_list = []
         self.gtg_calc()
-        # self.furn_calc(1, )
         self.sim_obj()
         print(self.result_list)
         print(self.mv_list)
@@ -260,4 +259,3 @@ class CASE_SIMULATION:
 
 if __name__ == "__main__":
     CASE_SIMULATION().run()
-
