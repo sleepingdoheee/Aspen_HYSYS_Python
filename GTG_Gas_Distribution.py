@@ -77,6 +77,7 @@ class AIR_BALANCE:
 
         ## Furnace Data
         self.furn_fgas_flow = Fuel_Feed # kg/hr, Furnace F/Gas Flow(Feed Model)
+        # self.furn_fgas_flow = Fuel_Raw
         self.furn_fgas_flow = [self.furn_fgas_flow[j] * df['RATIO'][i] for j in range(8)]   # Ratio, 분해로 Fuel Gas Density 보정, 1.97(HYSYS, 고정 or 계산) / NC1AI1002
 
         fuel_bias = [raw-cal for raw,cal in zip(Fuel_Raw, Fuel_Feed)]
@@ -111,12 +112,10 @@ class AIR_BALANCE:
         self.arr_length = arr.shape[1]
 
 
-
-
     def GTG_CALC(self):
         ''' GTG 배기가스 유량 및 조성 계산(PIS Tag 필요) '''
         ## GTG Fuel Flow, Comp.(Mol%)
-        self.gtg_fgas_flow = 1 * 0.9
+        self.gtg_fgas_flow = 0 * 0.9
         self.gtg_stack_o2 = 20.6
         GTG_Fuel_Flow = self.gtg_fgas_flow  # kg/hr
         GTG_Fuel_Hydrogen = 24.2622         # H2
@@ -143,6 +142,7 @@ class AIR_BALANCE:
         self.GTG_N2_Frac = GTG_N2_2 / GTG_EXHAUST_AIR
         self.GTG_H2O_Frac = GTG_H2O / GTG_EXHAUST_AIR
         self.GTG_CO2_Frac = GTG_CO2 / GTG_EXHAUST_AIR
+        
         ## GTG 배기가스 유량 계산(kg/hr)
         GTG_CO2_W = GTG_CO2 * 44 / 22.4
         GTG_H2O_W = GTG_H2O * 18 / 22.4
@@ -163,95 +163,26 @@ class AIR_BALANCE:
     def FURNACE_CALC(self, a):
         ''' 분해로 공기 유량 계산 '''
         ## Furnace Fuel Comp. (PIS Tag 필요)
-        FURN_Hydrogen = 22.0841             # H2
-        FURN_Methane = 67.8167              # CH4
-        FURN_Ethane = 5.1084                # C2H6
-        FURN_Ethylene = 1.0459              # C2H4
-        FURN_Propane = 1.4997               # C3H8
-        FURN_Propene = 0.0345               # C3H6
-        FURN_Acetylene = 0.0138             # C2H2
-        FURN_i_Butane = 0.0408              # i-C4 + PD
-        FURN_n_Butane = 0.1303              # n-C4
-        FURN_tr2_Butene = 0.1897            # T-2-C4-
-        FURN_1_Butene = 0.1044              # 1-C4-
-        FURN_i_Butene = 0.1532              # i-C4-
-        FURN_cis2_Butene = 0.4364           # C-2-C4-
-        FURN_22_Mpropane = 0.0003           # 2.2-DM-Propane
-        FURN_i_Pentane = 0.0613             # I-Pentane
-        FURN_12_Butadiene = 0.0679          # 1,2-BUTADIENE
-        FURN_M_Acetate = 0.001              # MA
-        FURN_13_Butadiene = 0.2205          # 1,3-BUTADIENE
-        FURN_3M_1_butene = 0.2606           # 3-M-1-Butene
-        FURN_VinylAcetate = 0.0203          # Vinyl acetylene
-        FURN_E_Acetate = 0.1508             # EA
-        FURN_CO = 0.1185                    # CO
-        FURN_CO2 = 0.0022                   # CO2
-        FURN_Nitrogen = 0.3278              # N2 + Unknown
-        FURN_n_Pentane = 0.0768             # n-C5
-        FURN_n_Hexane = 0.0084              # Hexane
-        FURN_Benzene = 0.024                # Benzene
-        FURN_n_Heptane = 0.0003             # Heptane
-        FURN_Toluene = 0.0012               # Toluene
-        FURN_E_Benzene = 0.0001             # EB
-        FURN_m_Xylene = 0.0001              # Xylene
+
 
         FURN_Fuel_Flow = self.furn_fgas_flow[a]  # kg/hr, Input
         FURN_EXCESS_O2 = self.furn_o2[a] # mol%, Input
+        print(FURN_Fuel_Flow)
+        FUEL_MWT = (np.dot(self.fuel_comp, self.arr_MWT))/100
+        FUEL_MOLE =  FURN_Fuel_Flow / FUEL_MWT
+        FURN_THEO_O2 = sum([FUEL_MOLE * (self.fuel_comp[i]/100) * self.arr_R2[i] * 22.4 for i in range(self.arr_length)])
+        FURN_THEO_AIR = FURN_THEO_O2 / self.HOTAIR_O2_Frac
+        FURN_THEO_CO2 = sum([FUEL_MOLE * (self.fuel_comp[i]/100) * self.arr_R3[i] * 22.4 for i in range(self.arr_length)]) + FURN_THEO_AIR * self.HOTAIR_CO2_Frac 
+        FURN_THEO_H2O = sum([FUEL_MOLE * (self.fuel_comp[i]/100) * self.arr_R4[i] * 22.4 for i in range(self.arr_length)]) + FURN_THEO_AIR * self.HOTAIR_H2O_Frac
+        FURN_THEO_N2 = FURN_THEO_AIR * self.HOTAIR_N2_Frac + (FUEL_MOLE * self.fuel_comp[25] / 100 * 22.4) 
+        FURN_EXCESS_AIR = (FURN_THEO_CO2 + FURN_THEO_H2O + FURN_THEO_N2) * FURN_EXCESS_O2 / 100 / (self.HOTAIR_O2_Frac - FURN_EXCESS_O2 / 100)  
 
-        FURN_Fuel_MW = (FURN_Hydrogen * 2.016 + FURN_Methane * 16.0429 + FURN_Ethane * 30.0699 + FURN_Ethylene * 28.0538 +
-                        FURN_Propane * 44.097 + FURN_Propene * 42.0806 + FURN_Acetylene * 26.038 + FURN_i_Butane * 58.124 +
-                        FURN_n_Butane * 58.124 + FURN_tr2_Butene * 56.1077 + FURN_1_Butene * 56.1077 + FURN_i_Butene * 56.1077 +
-                        FURN_cis2_Butene * 56.1077 + FURN_22_Mpropane * 72.151 + FURN_i_Pentane * 72.151 + FURN_12_Butadiene * 54.0918 +
-                        FURN_M_Acetate * 74.08 + FURN_13_Butadiene * 54.0918 + FURN_3M_1_butene * 70.135 + FURN_VinylAcetate * 52.076 +
-                        FURN_E_Acetate * 88.107 + FURN_CO * 28.01 + FURN_CO2 * 44 + FURN_Nitrogen * 28.01 + FURN_n_Pentane * 72.151 +
-                        FURN_n_Hexane * 86.1779 + FURN_Benzene * 78.11 + FURN_n_Heptane * 100.205 + FURN_Toluene * 92.1408 +
-                        FURN_E_Benzene * 106.166 + FURN_m_Xylene * 106.166) / 100   # kg/kmol
-
-        FURN_Fuel_LHV = (FURN_Hydrogen * 2.016 * 28670 + FURN_Methane * 16.0429 * 11953 + FURN_Ethane * 30.0699 * 11349 +
-                        FURN_Ethylene * 28.0538 * 11271 + FURN_Propane * 44.097 * 11078 + FURN_Propene * 42.0806 * 10942 +
-                        FURN_Acetylene * 26.038 * 10942 + FURN_i_Butane * 58.124 * 11525 + FURN_n_Butane * 58.124 * 10903 +
-                        FURN_tr2_Butene * 56.1077 * 10903 + FURN_1_Butene * 56.1077 * 10931 + FURN_i_Butene * 56.1077 * 10783 +
-                        FURN_cis2_Butene * 56.1077 * 10831 + FURN_22_Mpropane * 72.151 * 10747 + FURN_i_Pentane * 72.151 * 10801 +
-                        FURN_12_Butadiene * 54.0918 * 10812 + FURN_M_Acetate * 74.08 * 10812 + FURN_13_Butadiene * 54.0918 * 10647 +
-                        FURN_3M_1_butene * 70.135 * 4676 + FURN_VinylAcetate * 52.076 * 10647 + FURN_E_Acetate * 88.107 * 10727 +
-                        FURN_CO * 28.01 * 10000 + FURN_CO2 * 44 * 5594 + FURN_Nitrogen * 28.01 * 2414 + FURN_n_Pentane * 72.151 * 0 +
-                        FURN_n_Hexane * 86.1779 * 0 + FURN_Benzene * 78.11 * 10839 +FURN_n_Heptane * 100.205 * 10779 +
-                        FURN_Toluene * 92.1408 * 9698 + FURN_E_Benzene * 106.166 * 10736 + FURN_m_Xylene * 106.166 * 9784) / FURN_Fuel_MW / 100 # kcal/kg
-
-        # O2 계산 확인하기
-        FURN_THEO_O2 = FURN_Fuel_Flow / FURN_Fuel_MW * \
-                  (FURN_Hydrogen / 2 + FURN_Methane * 2 + FURN_Ethane * 3.5 + FURN_Ethylene * 3 + FURN_Propane * 5 + FURN_Propene * 4.5 + FURN_Acetylene * 2.5
-                  + FURN_i_Butane * 6.5 + FURN_n_Butane * 6.5 + FURN_tr2_Butene * 6 +  FURN_1_Butene * 6 + FURN_i_Butene * 6 + FURN_cis2_Butene * 6
-                  + FURN_22_Mpropane * 8 + FURN_i_Pentane * 8 + FURN_12_Butadiene * 5.5 + FURN_M_Acetate * 3.5 + FURN_13_Butadiene * 5.5 + FURN_3M_1_butene * 7.5
-                  + FURN_VinylAcetate * 5 + FURN_E_Acetate * 5 + FURN_CO * 0.5 + FURN_CO2 * 0 + FURN_Nitrogen * 0 + FURN_n_Pentane * 8 + FURN_n_Hexane * 9.5
-                  + FURN_Benzene * 7.5 + FURN_n_Heptane * 11 + FURN_Toluene * 9 + FURN_E_Benzene * 10.5 + FURN_m_Xylene * 10.5) / 100 * 22.4    # m3/hr
-
-        FURN_THEO_AIR = FURN_THEO_O2 / self.HOTAIR_O2_Frac  # m3/hr
-
-        FURN_THEO_CO2 = FURN_Fuel_Flow / FURN_Fuel_MW * \
-                  (FURN_Hydrogen / 2 * 0 + FURN_Methane * 1 + FURN_Ethane * 2 + FURN_Ethylene * 2 + FURN_Propane * 3 + FURN_Propene * 3 + FURN_Acetylene * 2
-                  + FURN_i_Butane * 4 + FURN_n_Butane * 4 + FURN_tr2_Butene * 4 +  FURN_1_Butene * 4 + FURN_i_Butene * 4 + FURN_cis2_Butene * 4
-                  + FURN_22_Mpropane * 5 + FURN_i_Pentane * 5 + FURN_12_Butadiene * 4 + FURN_M_Acetate * 3 + FURN_13_Butadiene * 4 + FURN_3M_1_butene * 5
-                  + FURN_VinylAcetate * 4 + FURN_E_Acetate * 4 + FURN_CO * 1 + FURN_CO2 * 1 + FURN_Nitrogen * 0 + FURN_n_Pentane * 5 + FURN_n_Hexane * 6
-                  + FURN_Benzene * 6 + FURN_n_Heptane * 7 + FURN_Toluene * 7 + FURN_E_Benzene * 8 + FURN_m_Xylene * 8) / 100 * 22.4 + FURN_THEO_AIR * self.HOTAIR_CO2_Frac  # m3/hr
-
-        FURN_THEO_H2O = FURN_Fuel_Flow / FURN_Fuel_MW * \
-                  (FURN_Hydrogen * 1 + FURN_Methane * 2 + FURN_Ethane * 3 + FURN_Ethylene * 2 + FURN_Propane * 4 + FURN_Propene * 3 + FURN_Acetylene * 1
-                  + FURN_i_Butane * 5 + FURN_n_Butane * 5 + FURN_tr2_Butene * 4 + FURN_1_Butene * 4 + FURN_i_Butene * 4 + FURN_cis2_Butene * 4
-                  + FURN_22_Mpropane * 6 + FURN_i_Pentane * 6 + FURN_12_Butadiene * 3 + FURN_M_Acetate * 3 + FURN_13_Butadiene * 3 + FURN_3M_1_butene * 5
-                  + FURN_VinylAcetate * 2 + FURN_E_Acetate * 4 + FURN_CO * 0 + FURN_CO2 * 0 + FURN_Nitrogen * 0 + FURN_n_Pentane * 6 + FURN_n_Hexane * 7
-                  + FURN_Benzene * 3 + FURN_n_Heptane * 8 + FURN_Toluene * 4 + FURN_E_Benzene * 5 + FURN_m_Xylene * 5) / 100 * 22.4 + FURN_THEO_AIR * self.HOTAIR_H2O_Frac  # m3/hr
-
-        FURN_THEO_N2 = FURN_THEO_AIR * self.HOTAIR_N2_Frac + FURN_Fuel_Flow / FURN_Fuel_MW * FURN_Nitrogen / 100 * 22.4 # m3/hr
-
-        FURN_EXCESS_AIR = (FURN_THEO_CO2 + FURN_THEO_H2O + FURN_THEO_N2) * FURN_EXCESS_O2 / 100 / (self.HOTAIR_O2_Frac - FURN_EXCESS_O2 / 100)  # m3/hr
-
-        HOTAIR_V = FURN_THEO_AIR + FURN_EXCESS_AIR  # m3/hr
-        ## Volume(m3 /hr) -> Mass(kg/hr)
+        # HOT AIR의 질량 유속 및 O2 조성 계산
+        HOTAIR_V = FURN_THEO_AIR + FURN_EXCESS_AIR                  # m3/hr
         HOTAIR_CO2 = HOTAIR_V * self.HOTAIR_CO2_Frac / 22.4 * 44    # kg/hr
         HOTAIR_H2O = HOTAIR_V * self.HOTAIR_H2O_Frac / 22.4 * 18    # kg/hr
-        HOTAIR_N2 = HOTAIR_V * self.HOTAIR_N2_Frac / 22.4 * 28  # kg/hr
-        HOTAIR_O2 = HOTAIR_V * self.HOTAIR_O2_Frac / 22.4 * 32  # kg/hr
+        HOTAIR_N2 = HOTAIR_V * self.HOTAIR_N2_Frac / 22.4 * 28      # kg/hr
+        HOTAIR_O2 = HOTAIR_V * self.HOTAIR_O2_Frac / 22.4 * 32      # kg/hr
         HOTAIR_W = HOTAIR_CO2 + HOTAIR_H2O + HOTAIR_N2 + HOTAIR_O2  # kg/hr
 
         return HOTAIR_W, HOTAIR_O2
@@ -296,7 +227,8 @@ class AIR_BALANCE:
         obj_FURN_AIR = furn_air_sum
 
         obj = (obj_HOT_AIR - obj_FURN_AIR) ** 2
-
+        print(obj_HOT_AIR, obj_FURN_AIR)
+        print(obj_FURN_AIR)
         self.obj_HOT_AIR = obj_HOT_AIR
         self.obj_FURN_AIR = obj_FURN_AIR
 
@@ -325,4 +257,5 @@ class AIR_BALANCE:
 
 if __name__ == "__main__":
     AIR_BALANCE().run()
+
 
